@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: facetrack-api
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: DB_HOST
+        value: ep-empty-violet-avfujn71.c-11.us-east-1.aws.neon.tech
+      - key: DB_PORT
+        value: 5432
+      - key: DB_NAME
+        value: neondb
+      - key: DB_USER
+        value: neondb_owner
+      - key: DB_PASSWORD
+        value: npg_HADY0m9Rsxae
+      - key: DB_SSLMODE
+        value: require
+      - key: JWT_SECRET
+        value: facetrack_jwt_secret_neon_2026_production_secure_key
+      - key: ALLOWED_ORIGIN
+        value: https://facetrack.vercel.app
