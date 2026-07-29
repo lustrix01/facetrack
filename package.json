@@ -1,0 +1,14 @@
+{
+  "name": "facetrack",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FaceTrack full-stack application",
+  "scripts": {
+    "start": "node start.js",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "backend": "php -S localhost:8000 -t backend",
+    "migrate": "php backend/config/migrate.php",
+    "seed": "php backend/config/seed.php"
+  }
+}
