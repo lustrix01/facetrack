@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node start.js",
     "dev": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
+    "build": "cd frontend && npm install && npm run build",
     "backend": "php -S localhost:8000 -t backend",
     "migrate": "php backend/config/migrate.php",
     "seed": "php backend/config/seed.php"
