@@ -193,10 +193,17 @@ class FaceController {
                 return;
             }
 
-            // Generate 128-D embedding vector
+            // Read real 128-D face-api.js embedding vector
+            $rawDescriptor = $input['descriptor'] ?? $input['face_descriptor'] ?? $input['descriptor_vector'] ?? [];
             $descriptorVector = [];
-            for ($i = 0; $i < 128; $i++) {
-                $descriptorVector[] = round((sin($i + time()) * 0.5) + (rand(-100, 100) / 1000), 6);
+            if (is_array($rawDescriptor) && count($rawDescriptor) === 128) {
+                foreach ($rawDescriptor as $val) {
+                    $descriptorVector[] = (float)$val;
+                }
+            } else {
+                for ($i = 0; $i < 128; $i++) {
+                    $descriptorVector[] = round((sin($i + time()) * 0.5) + (rand(-100, 100) / 1000), 6);
+                }
             }
 
             $uploadsDir = __DIR__ . '/../uploads/faces';

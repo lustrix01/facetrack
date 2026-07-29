@@ -55,7 +55,7 @@ export const faceService = {
     });
   },
 
-  async enrollFace(samples: string[], sampleCount: number, reEnroll: boolean = false): Promise<void> {
+  async enrollFace(samples: string[], sampleCount: number, reEnroll: boolean = false, descriptor: number[] = []): Promise<void> {
     await apiFetch<{ status: string }>('/api/face/enroll', {
       method: 'POST',
       body: JSON.stringify({
@@ -63,6 +63,8 @@ export const faceService = {
         sample_count: sampleCount,
         image_snapshot: samples[0] || '',
         re_enroll: reEnroll,
+        descriptor,
+        face_descriptor: descriptor,
       }),
     });
   },

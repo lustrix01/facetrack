@@ -262,7 +262,7 @@ export const StudentFaceEnrollmentPage: React.FC = () => {
 
       stopCamera();
 
-      await faceService.enrollFace(samples, samples.length, status.is_enrolled);
+      await faceService.enrollFace(samples, samples.length, status.is_enrolled, descriptorVector);
       setCompletionSuccess(true);
       toastSuccess('Face Enrollment Completed Successfully', 'Your 128-D facial descriptor is now active in Neon PostgreSQL.');
       setIsReEnrollConfirmOpen(false);

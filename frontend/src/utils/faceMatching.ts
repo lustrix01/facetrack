@@ -139,22 +139,28 @@ export function analyzeMediaPipePose(
 }
 
 /**
- * Generate 128-d Face Descriptor using face-api.js
+ * Generate 128-d Face Descriptor using face-api.js with retry loop
  */
 export async function computeFaceDescriptor(
-  videoElement: HTMLVideoElement
+  videoElement: HTMLVideoElement,
+  maxRetries: number = 5
 ): Promise<number[] | null> {
-  try {
-    const detection = await faceapi
-      .detectSingleFace(videoElement)
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const detection = await faceapi
+        .detectSingleFace(videoElement, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+        .withFaceLandmarks()
+        .withFaceDescriptor();
 
-    if (!detection) return null;
-    return Array.from(detection.descriptor);
-  } catch {
-    return null;
+      if (detection && detection.descriptor) {
+        return Array.from(detection.descriptor);
+      }
+    } catch {
+      // Retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
+  return null;
 }
 
 /**

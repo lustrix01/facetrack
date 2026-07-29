@@ -9,7 +9,7 @@ import { classService, type ClassItem } from '../services/classService';
 import { faceService } from '../services/faceService';
 import { loadFaceRecognitionEngines } from '../utils/faceApiLoader';
 import { analyzeMediaPipePose, computeFaceDescriptor } from '../utils/faceMatching';
-import { Camera, MapPin, Smile, CheckCircle2, Clock, Navigation, LogOut, Database, RefreshCw, Lock, Check, AlertTriangle } from 'lucide-react';
+import { Camera, MapPin, Smile, CheckCircle2, Clock, Navigation, LogOut, Database, RefreshCw, Lock, Check, AlertTriangle, Sparkles } from 'lucide-react';
 import { FaceLandmarker } from '@mediapipe/tasks-vision';
 
 export const StudentAttendancePage: React.FC = () => {
@@ -37,6 +37,7 @@ export const StudentAttendancePage: React.FC = () => {
   const [longitude, setLongitude] = useState<string>('120.9842');
   const [isGpsLoading, setIsGpsLoading] = useState<boolean>(false);
   const [faceWarningMsg, setFaceWarningMsg] = useState<string | null>(null);
+  const [autoScanTriggered, setAutoScanTriggered] = useState<boolean>(false);
 
   // Precise Result Status Feedback
   const [resultCode, setResultCode] = useState<AttendanceResultCode>(null);
@@ -48,6 +49,7 @@ export const StudentAttendancePage: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const autoSubmitLockRef = useRef<boolean>(false);
 
   const loadEnrolledClasses = async () => {
     try {
@@ -142,6 +144,8 @@ export const StudentAttendancePage: React.FC = () => {
     setCameraError(null);
     setResultCode(null);
     setResultMessage(null);
+    setAutoScanTriggered(false);
+    autoSubmitLockRef.current = false;
     setIsCameraActive(true);
 
     let stream: MediaStream | null = null;
@@ -170,11 +174,12 @@ export const StudentAttendancePage: React.FC = () => {
       };
     }
 
-    toastInfo('MediaPipe Detection Active', 'Position your face within the camera viewport.');
+    toastInfo('MediaPipe Detection Active', 'Smile at the camera to automatically verify attendance.');
     startRealTimeLandmarkLoop();
   };
 
   const stopCamera = () => {
+    autoSubmitLockRef.current = false;
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -206,6 +211,13 @@ export const StudentAttendancePage: React.FC = () => {
               setFaceWarningMsg(null);
               setSmileScore(analysis.smileScore);
               setIsSmileDetected(analysis.isSmileDetected);
+
+              // AUTOMATIC CHECK-IN ON SMILE VERIFIED:
+              if (analysis.isSmileDetected && !autoSubmitLockRef.current && !isSubmitting) {
+                autoSubmitLockRef.current = true;
+                setAutoScanTriggered(true);
+                handleCheckInSubmit();
+              }
             }
           } else {
             setIsSmileDetected(true);
@@ -215,31 +227,21 @@ export const StudentAttendancePage: React.FC = () => {
           // Skip frame
         }
       }
-      animFrameRef.current = requestAnimationFrame(processFrame);
+      if (streamRef.current && !autoSubmitLockRef.current) {
+        animFrameRef.current = requestAnimationFrame(processFrame);
+      }
     };
 
     animFrameRef.current = requestAnimationFrame(processFrame);
   };
 
   const handleCheckInSubmit = async () => {
-    if (!activeData.data?.session || !selectedClassId) return;
+    if (!activeData.data?.session || !selectedClassId) {
+      autoSubmitLockRef.current = false;
+      return;
+    }
     setResultCode(null);
     setResultMessage(null);
-
-    if (faceWarningMsg) {
-      setResultCode('Face Not Recognized');
-      setResultMessage(faceWarningMsg);
-      toastError('Face Verification Error', faceWarningMsg);
-      return;
-    }
-
-    if (!isSmileDetected) {
-      setResultCode('Smile Not Detected');
-      setResultMessage('Smile verification failed. Please smile directly at the camera before checking in.');
-      toastError('Smile Verification Failed', 'Please smile directly at the camera and try again.');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -248,12 +250,6 @@ export const StudentAttendancePage: React.FC = () => {
         const computed = await computeFaceDescriptor(videoRef.current);
         if (computed && computed.length === 128) {
           liveDescriptor = computed;
-        }
-      }
-
-      if (liveDescriptor.length !== 128) {
-        for (let i = 0; i < 128; i++) {
-          liveDescriptor.push(Number((Math.sin(i + Date.now()) * 0.5).toFixed(6)));
         }
       }
 
@@ -279,6 +275,8 @@ export const StudentAttendancePage: React.FC = () => {
       }
       await loadActiveSession(selectedClassId);
     } catch (err: any) {
+      autoSubmitLockRef.current = false;
+      setAutoScanTriggered(false);
       const code = (err.result_code || 'Face Not Recognized') as AttendanceResultCode;
       setResultCode(code);
       setResultMessage(err.message || 'Face does not match the enrolled student.');
@@ -324,7 +322,7 @@ export const StudentAttendancePage: React.FC = () => {
               <Database className="w-3 h-3 text-emerald-600" /> Neon DB
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">MediaPipe & face-api.js FaceMatcher 1:1 Descriptor Verification</p>
+          <p className="text-xs text-slate-500 mt-0.5">Automated MediaPipe Smile Liveness & face-api.js FaceMatcher 1:1 Verification</p>
         </div>
 
         <Button variant="secondary" size="sm" onClick={() => selectedClassId && loadActiveSession(selectedClassId)}>
@@ -437,7 +435,7 @@ export const StudentAttendancePage: React.FC = () => {
       {/* Verification Pipeline Execution */}
       {session && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Left Column: MediaPipe Feed & face-api.js FaceMatcher */}
+          {/* Left Column: MediaPipe Feed & Automatic Face Matcher */}
           <Card title="MediaPipe & face-api.js Matcher" subtitle="MediaPipe pose tracking & FaceMatcher descriptor verification">
             <div className="space-y-4">
               {cameraError && (
@@ -448,6 +446,13 @@ export const StudentAttendancePage: React.FC = () => {
                 <div className="p-3 rounded-xl bg-amber-50 text-xs text-amber-900 font-bold flex items-center gap-2 animate-pulse">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                   {faceWarningMsg}
+                </div>
+              )}
+
+              {autoScanTriggered && (
+                <div className="p-3 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-2 animate-pulse">
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  Smile Verified! Automatically scanning face & verifying location...
                 </div>
               )}
 
@@ -484,7 +489,7 @@ export const StudentAttendancePage: React.FC = () => {
                       Smile Liveness Meter: {smileScore}%
                     </span>
                     <span className={`text-[11px] ${isSmileDetected ? 'text-emerald-700 font-bold' : 'text-blue-600'}`}>
-                      {isSmileDetected ? '✓ Smile Verified!' : 'Please Smile'}
+                      {isSmileDetected ? '✓ Smile Verified — Auto Scanning!' : 'Please Smile'}
                     </span>
                   </div>
                   <div className="w-full bg-blue-200/80 h-2 rounded-full overflow-hidden">
@@ -574,7 +579,7 @@ export const StudentAttendancePage: React.FC = () => {
                     disabled={isSubmitting || !isCameraActive}
                   >
                     {isSubmitting ? (
-                      <><Spinner size="sm" className="mr-2" />Running face-api.js FaceMatcher...</>
+                      <><Spinner size="sm" className="mr-2" />Scanning & Comparing Face...</>
                     ) : (
                       <><CheckCircle2 className="w-4 h-4 mr-2" /> Verify Face & Complete Check-in</>
                     )}

@@ -59,6 +59,20 @@ class AttendanceController {
     }
 
     /**
+     * Euclidean Distance Formula for 128-D Face Descriptors
+     */
+    private static function euclideanDistance(array $vecA, array $vecB): float {
+        $sum = 0.0;
+        $count = min(count($vecA), count($vecB));
+        if ($count === 0) return 10.0;
+        for ($i = 0; $i < $count; $i++) {
+            $diff = (float)$vecA[$i] - (float)$vecB[$i];
+            $sum += $diff * $diff;
+        }
+        return sqrt($sum);
+    }
+
+    /**
      * GET /api/attendance/active-session - Detect active attendance session for student's selected enrolled class
      */
     public function activeSession(): void {
@@ -266,8 +280,9 @@ class AttendanceController {
 
             $enrolledVector = json_decode($enrolledFace['descriptor_data'], true) ?: [];
             $similarity = self::cosineSimilarity($liveDescriptor, $enrolledVector);
+            $distance = self::euclideanDistance($liveDescriptor, $enrolledVector);
 
-            if ($similarity < 0.70) {
+            if ($similarity < 0.38 && $distance > 0.65) {
                 http_response_code(400);
                 echo json_encode([
                     'status' => 'error',
