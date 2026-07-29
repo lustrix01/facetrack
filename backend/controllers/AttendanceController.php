@@ -249,23 +249,32 @@ class AttendanceController {
                 echo json_encode([
                     'status' => 'error',
                     'result_code' => 'Face Not Recognized',
-                    'message' => 'No enrolled facial profile found. Please complete facial enrollment first.'
+                    'message' => 'No enrolled facial profile found.'
+                ]);
+                return;
+            }
+
+            if (empty($liveDescriptor)) {
+                http_response_code(400);
+                echo json_encode([
+                    'status' => 'error',
+                    'result_code' => 'Face Not Recognized',
+                    'message' => 'Face does not match the enrolled student.'
                 ]);
                 return;
             }
 
             $enrolledVector = json_decode($enrolledFace['descriptor_data'], true) ?: [];
-            if (!empty($liveDescriptor)) {
-                $similarity = self::cosineSimilarity($liveDescriptor, $enrolledVector);
-                if ($similarity < 0.70) {
-                    http_response_code(400);
-                    echo json_encode([
-                        'status' => 'error',
-                        'result_code' => 'Face Not Recognized',
-                        'message' => 'Face biometric verification failed. Facial embedding mismatch (Similarity: ' . number_format($similarity * 100, 1) . '%).'
-                    ]);
-                    return;
-                }
+            $similarity = self::cosineSimilarity($liveDescriptor, $enrolledVector);
+
+            if ($similarity < 0.70) {
+                http_response_code(400);
+                echo json_encode([
+                    'status' => 'error',
+                    'result_code' => 'Face Not Recognized',
+                    'message' => 'Face does not match the enrolled student.'
+                ]);
+                return;
             }
 
             // GPS Verification: Calculate Distance
@@ -480,7 +489,68 @@ class AttendanceController {
             $database = new Database();
             $pdo = $database->getConnection();
 
-            if (strtolower($user['role'] ?? '') === 'faculty') {
+            if (strtolower($user['role'] ?? '') === 'student') {
+                $studentId = (int)$user['sub'];
+
+                // Enrolled classes count
+                $enrolledStmt = $pdo->prepare("SELECT COUNT(*) FROM enrollments WHERE student_id = :student_id");
+                $enrolledStmt->execute([':student_id' => $studentId]);
+                $enrolledClassesCount = (int)$enrolledStmt->fetchColumn();
+
+                // Face enrollment status
+                $faceStmt = $pdo->prepare("SELECT id FROM face_enrollments WHERE user_id = :user_id AND status = 'active' LIMIT 1");
+                $faceStmt->execute([':user_id' => $studentId]);
+                $faceEnrolled = (bool)$faceStmt->fetch();
+
+                // Attendance counts & rate
+                $presStmt = $pdo->prepare("SELECT COUNT(*) FROM attendance WHERE student_id = :student_id AND status = 'present'");
+                $presStmt->execute([':student_id' => $studentId]);
+                $presentCount = (int)$presStmt->fetchColumn();
+
+                $lateStmt = $pdo->prepare("SELECT COUNT(*) FROM attendance WHERE student_id = :student_id AND status = 'late'");
+                $lateStmt->execute([':student_id' => $studentId]);
+                $lateCount = (int)$lateStmt->fetchColumn();
+
+                $absentStmt = $pdo->prepare("SELECT COUNT(*) FROM attendance WHERE student_id = :student_id AND status = 'absent'");
+                $absentStmt->execute([':student_id' => $studentId]);
+                $absentCount = (int)$absentStmt->fetchColumn();
+
+                $totalAttended = $presentCount + $lateCount;
+                $totalSessions = $totalAttended + $absentCount;
+                $attendanceRate = $totalSessions > 0 ? round(($totalAttended / $totalSessions) * 100, 1) : 100.0;
+
+                // Today's classes count
+                $todayClassStmt = $pdo->prepare("SELECT COUNT(DISTINCT s.class_id) FROM attendance_sessions s JOIN enrollments e ON s.class_id = e.class_id WHERE e.student_id = :student_id AND s.session_date = CURRENT_DATE");
+                $todayClassStmt->execute([':student_id' => $studentId]);
+                $todayClassesCount = (int)$todayClassStmt->fetchColumn();
+
+                // Last attendance record
+                $lastAttStmt = $pdo->prepare("SELECT a.timestamp, a.status, c.code as class_code, c.name as class_name FROM attendance a JOIN attendance_sessions s ON a.session_id = s.id JOIN classes c ON s.class_id = c.id WHERE a.student_id = :student_id ORDER BY a.id DESC LIMIT 1");
+                $lastAttStmt->execute([':student_id' => $studentId]);
+                $lastAttendance = $lastAttStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+                // Upcoming active session
+                $upStmt = $pdo->prepare("SELECT s.id as session_id, s.start_time, c.code as class_code, c.name as class_name, c.room FROM attendance_sessions s JOIN classes c ON s.class_id = c.id JOIN enrollments e ON c.id = e.class_id WHERE e.student_id = :student_id AND s.status = 'active' ORDER BY s.id DESC LIMIT 1");
+                $upStmt->execute([':student_id' => $studentId]);
+                $upcomingClass = $upStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+                echo json_encode([
+                    'status' => 'success',
+                    'database' => 'Live Neon PostgreSQL',
+                    'data' => [
+                        'attendanceRate' => $attendanceRate,
+                        'totalEnrolledClasses' => $enrolledClassesCount,
+                        'faceEnrolled' => $faceEnrolled,
+                        'todayClassesCount' => $todayClassesCount,
+                        'presentCount' => $presentCount,
+                        'lateCount' => $lateCount,
+                        'absentCount' => $absentCount,
+                        'lastAttendance' => $lastAttendance,
+                        'upcomingClass' => $upcomingClass
+                    ]
+                ]);
+                return;
+            } else if (strtolower($user['role'] ?? '') === 'faculty') {
                 $facId = (int)$user['sub'];
                 $classStmt = $pdo->prepare("SELECT COUNT(*) FROM classes WHERE faculty_id = :fac_id");
                 $classStmt->execute([':fac_id' => $facId]);

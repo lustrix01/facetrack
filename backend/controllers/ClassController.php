@@ -83,10 +83,13 @@ class ClassController {
 
         $input = Sanitizer::jsonBody();
 
-        $code    = Sanitizer::string($input['code'] ?? '');
-        $name    = Sanitizer::string($input['name'] ?? '');
-        $section = Sanitizer::string($input['section'] ?? 'Sec 1');
-        $room    = Sanitizer::string($input['room'] ?? '');
+        $code        = Sanitizer::string($input['code'] ?? '');
+        $name        = Sanitizer::string($input['name'] ?? '');
+        $section     = Sanitizer::string($input['section'] ?? 'Sec 1');
+        $room        = Sanitizer::string($input['room'] ?? '');
+        $scheduleDay = Sanitizer::string($input['schedule_day'] ?? 'Mon / Wed');
+        $startTime   = Sanitizer::string($input['start_time'] ?? '09:00:00');
+        $endTime     = Sanitizer::string($input['end_time'] ?? '10:30:00');
 
         $v = new Validator(['code' => $code, 'name' => $name, 'section' => $section, 'room' => $room]);
         $v->required('code', 'Subject Code')
@@ -118,16 +121,19 @@ class ClassController {
             }
 
             $stmt = $pdo->prepare(
-                "INSERT INTO classes (code, name, section, room, faculty_id)
-                 VALUES (:code, :name, :section, :room, :faculty_id)
+                "INSERT INTO classes (code, name, section, room, faculty_id, schedule_day, start_time, end_time)
+                 VALUES (:code, :name, :section, :room, :faculty_id, :schedule_day, :start_time, :end_time)
                  RETURNING id, code, name, section, room, faculty_id, created_at"
             );
             $stmt->execute([
-                ':code'      => $code,
-                ':name'      => $name,
-                ':section'   => $section,
-                ':room'      => $room,
-                ':faculty_id'=> (int)$user['sub'],
+                ':code'         => $code,
+                ':name'         => $name,
+                ':section'      => $section,
+                ':room'         => $room,
+                ':faculty_id'   => (int)$user['sub'],
+                ':schedule_day' => $scheduleDay,
+                ':start_time'   => $startTime,
+                ':end_time'     => $endTime,
             ]);
 
             $class = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -139,8 +145,16 @@ class ClassController {
             ]);
 
         } catch (PDOException $e) {
+            if ($e->getCode() === '23505') {
+                http_response_code(409);
+                echo json_encode([
+                    'status'  => 'error',
+                    'message' => "A class with code '{$code}' already exists."
+                ]);
+                return;
+            }
             http_response_code(500);
-            echo json_encode(['status' => 'error', 'message' => 'Failed to create class.']);
+            echo json_encode(['status' => 'error', 'message' => 'Failed to create class: ' . $e->getMessage()]);
         }
     }
 
