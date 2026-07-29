@@ -91,6 +91,8 @@ export const attendanceService = {
     longitude: number;
     smile_verified: boolean;
     live_descriptor?: number[];
+    image_snapshot?: string;
+    image?: string;
   }): Promise<CheckinResponse> {
     const res = await apiFetch<CheckinResponse>('/api/attendance/checkin', {
       method: 'POST',

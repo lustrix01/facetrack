@@ -10,6 +10,7 @@ use Config\Database;
 use Helpers\Sanitizer;
 use Helpers\Validator;
 use Middleware\AuthMiddleware;
+use Services\AiServiceClient;
 use PDO;
 use PDOException;
 
@@ -268,28 +269,47 @@ class AttendanceController {
                 return;
             }
 
-            if (empty($liveDescriptor)) {
-                http_response_code(400);
-                echo json_encode([
-                    'status' => 'error',
-                    'result_code' => 'Face Not Recognized',
-                    'message' => 'Face does not match the enrolled student.'
-                ]);
-                return;
-            }
-
             $enrolledVector = json_decode($enrolledFace['descriptor_data'], true) ?: [];
-            $similarity = self::cosineSimilarity($liveDescriptor, $enrolledVector);
-            $distance = self::euclideanDistance($liveDescriptor, $enrolledVector);
+            $imageB64 = Sanitizer::string($input['image'] ?? $input['image_snapshot'] ?? '');
 
-            if ($similarity < 0.38 && $distance > 0.65) {
-                http_response_code(400);
-                echo json_encode([
-                    'status' => 'error',
-                    'result_code' => 'Face Not Recognized',
-                    'message' => 'Face does not match the enrolled student.'
-                ]);
-                return;
+            // Call Python AI Microservice /verify if image snapshot is provided
+            if (!empty($imageB64) && !empty($enrolledVector)) {
+                $aiVerify = AiServiceClient::verify($imageB64, $enrolledVector, true);
+                if (!isset($aiVerify['match']) || $aiVerify['match'] === false) {
+                    $resCode = $aiVerify['result_code'] ?? 'Face Not Recognized';
+                    $msg = $aiVerify['message'] ?? 'Face does not match the enrolled student.';
+                    http_response_code(400);
+                    echo json_encode([
+                        'status' => 'error',
+                        'result_code' => $resCode,
+                        'message' => $msg
+                    ]);
+                    return;
+                }
+            } else {
+                // Fallback internal check
+                if (empty($liveDescriptor)) {
+                    http_response_code(400);
+                    echo json_encode([
+                        'status' => 'error',
+                        'result_code' => 'Face Not Recognized',
+                        'message' => 'Face does not match the enrolled student.'
+                    ]);
+                    return;
+                }
+
+                $similarity = self::cosineSimilarity($liveDescriptor, $enrolledVector);
+                $distance = self::euclideanDistance($liveDescriptor, $enrolledVector);
+
+                if ($similarity < 0.38 && $distance > 0.65) {
+                    http_response_code(400);
+                    echo json_encode([
+                        'status' => 'error',
+                        'result_code' => 'Face Not Recognized',
+                        'message' => 'Face does not match the enrolled student.'
+                    ]);
+                    return;
+                }
             }
 
             // GPS Verification: Calculate Distance

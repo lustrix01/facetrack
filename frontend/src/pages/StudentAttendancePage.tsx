@@ -253,6 +253,18 @@ export const StudentAttendancePage: React.FC = () => {
         }
       }
 
+      let snapshot = '';
+      if (videoRef.current) {
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth || 640;
+        canvas.height = videoRef.current.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          snapshot = canvas.toDataURL('image/png');
+        }
+      }
+
       const res = await attendanceService.checkin({
         session_id: activeData.data.session.session_id,
         class_id: selectedClassId,
@@ -260,6 +272,8 @@ export const StudentAttendancePage: React.FC = () => {
         longitude: parseFloat(longitude),
         smile_verified: true,
         live_descriptor: liveDescriptor,
+        image_snapshot: snapshot,
+        image: snapshot,
       });
 
       stopCamera();

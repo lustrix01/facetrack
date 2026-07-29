@@ -10,6 +10,7 @@ use Config\Database;
 use Helpers\Sanitizer;
 use Helpers\Validator;
 use Middleware\AuthMiddleware;
+use Services\AiServiceClient;
 use PDO;
 use PDOException;
 
@@ -193,16 +194,23 @@ class FaceController {
                 return;
             }
 
-            // Read real 128-D face-api.js embedding vector
-            $rawDescriptor = $input['descriptor'] ?? $input['face_descriptor'] ?? $input['descriptor_vector'] ?? [];
+            // Call Python AI Microservice /enroll for InsightFace 512-D embedding
+            $aiResult = AiServiceClient::enroll($samples);
             $descriptorVector = [];
-            if (is_array($rawDescriptor) && count($rawDescriptor) === 128) {
-                foreach ($rawDescriptor as $val) {
-                    $descriptorVector[] = (float)$val;
-                }
+
+            if ($aiResult['success'] && !empty($aiResult['embedding'])) {
+                $descriptorVector = $aiResult['embedding'];
             } else {
-                for ($i = 0; $i < 128; $i++) {
-                    $descriptorVector[] = round((sin($i + time()) * 0.5) + (rand(-100, 100) / 1000), 6);
+                // Fallback: Read client-side 128-D vector if Python AI service is offline
+                $rawDescriptor = $input['descriptor'] ?? $input['face_descriptor'] ?? $input['descriptor_vector'] ?? [];
+                if (is_array($rawDescriptor) && count($rawDescriptor) >= 128) {
+                    foreach ($rawDescriptor as $val) {
+                        $descriptorVector[] = (float)$val;
+                    }
+                } else {
+                    for ($i = 0; $i < 128; $i++) {
+                        $descriptorVector[] = round((sin($i + time()) * 0.5) + (rand(-100, 100) / 1000), 6);
+                    }
                 }
             }
 
